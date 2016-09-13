@@ -54,7 +54,7 @@ int main(string[] args)
         else
         {
             names[i] = column;
-            options[i] = [column];
+            options[i] = column.split(".");
         }
     }
     auto fin = finName.length ? File(finName) : stdin;
