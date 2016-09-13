@@ -1,0 +1,12 @@
+{
+	"name": "je",
+	"authors": [
+		"Ilya Yaroshenko"
+	],
+	"dependencies": {
+		"asdf": "~>0.0.11"
+	},
+	"description": "Json Extract: a tool to extract data from json",
+	"copyright": "Copyright © 2016, Tamedia Digital",
+	"license": "proprietary"
+}
