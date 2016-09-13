@@ -11,7 +11,7 @@ int main(string[] args)
     string[] names;
     string[][] options;
     string[] columns;
-    size_t chunkSize = 4098;
+    size_t chunkSize = 4096;
     string finName;
     string foutName;
     string sep = "\t";
