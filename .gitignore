@@ -2,3 +2,10 @@
 .DS_Store
 
 *.sublime-project
+
+*.o
+
+.dub
+je
+
+*.tsv

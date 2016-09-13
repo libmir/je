@@ -8,6 +8,7 @@ import asdf;
 
 int main(string[] args)
 {
+    bool header = true;
     string[] names;
     string[][] options;
     string[] columns;
@@ -26,6 +27,7 @@ int main(string[] args)
             "n|newline", `row separator, default value is "\n"`, &newline,
             "o|output", "Output file name", &foutName,
             "i|input", "Input file name", &finName,
+            "header", "Add header, default value is 'true'", &header,
             "chunk-size", "Input chunk size in bytes, defult valut is " ~ chunkSize.to!string, &chunkSize,
             );
         if (helpInformation.helpWanted)
@@ -60,7 +62,8 @@ int main(string[] args)
     auto fin = finName.length ? File(finName) : stdin;
     auto fout = foutName.length ? File(foutName, "w") : stdout;
 
-    fout.writef("%(%s" ~ sep ~ "%)" ~ newline, names);
+    if(header)
+        fout.writef("%(%s" ~ sep ~ "%)" ~ newline, names);
     ////////////
     auto ltw = fout.lockingTextWriter;
     foreach(line; fin.byChunk(chunkSize).parseJsonByLine())
