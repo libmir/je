@@ -1,5 +1,6 @@
-JE - Fast JSON to TSV/CSV Extractor
+JE
 =====
+Fast JSON to TSV/CSV Extractor.
 
 ### Build je
 
@@ -10,7 +11,7 @@ JE - Fast JSON to TSV/CSV Extractor
   - [LDC](https://github.com/ldc-developers/ldc) (LLVM D Compiler) >= `1.1.0-beta2`
   - [DMD](http://dlang.org/download.html) (DigitalMars D Compiler) >= `2.072.1`
 
-### Build with the dub package manager
+#### Build with the dub package manager
 
 To build project with LDC run following command from `je` project:
 ```
