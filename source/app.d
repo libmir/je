@@ -18,6 +18,7 @@ int main(string[] args)
     string sep = "\t";
     string newline = "\n";
     arraySep = ",";
+    bool raw;
     try
     {
         auto helpInformation = args.getopt(
@@ -27,6 +28,7 @@ int main(string[] args)
             "n|newline", `row separator, default value is "\n"`, &newline,
             "o|output", "Output file name", &foutName,
             "i|input", "Input file name", &finName,
+            "r|raw", "Raw output for strings. R22emoves '\"' braces.", &raw,
             "header", "Add header, default value is 'true'", &header,
             "chunk-size", "Input chunk size in bytes, defult valut is " ~ chunkSize.to!string, &chunkSize,
             );
@@ -63,7 +65,20 @@ int main(string[] args)
     auto fout = foutName.length ? File(foutName, "w") : stdout;
 
     if(header)
-        fout.writef("%(%s" ~ sep ~ "%)" ~ newline, names);
+    {
+        if(raw)
+        {
+            foreach(i, name; names)
+            {
+                fout.write(name);
+                fout.write(i == names.length - 1 ? newline : sep);
+            }
+        }
+        else
+        {
+            fout.writef("%(%s" ~ sep ~ "%)" ~ newline, names);
+        }
+    }
     ////////////
     auto ltw = fout.lockingTextWriter;
     foreach(line; fin.byChunk(chunkSize).parseJsonByLine())
@@ -72,7 +87,16 @@ int main(string[] args)
         {
             auto val = line[option];
             if(val.data.length)
-                val.toString(&ltw.put!(const(char)[]));
+            {
+                if(raw && val.kind == Asdf.Kind.string)
+                {
+                    ltw.put(cast(string) val);
+                }
+                else
+                {
+                    val.toString(&ltw.put!(const(char)[]));
+                }
+            }
             ltw.put(i == options.length - 1 ? newline : sep);
         }
     }
