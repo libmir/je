@@ -28,7 +28,7 @@ int main(string[] args)
             "n|newline", `row separator, default value is "\n"`, &newline,
             "o|output", "Output file name", &foutName,
             "i|input", "Input file name", &finName,
-            "r|raw", "Raw output for strings. R22emoves '\"' braces.", &raw,
+            "r|raw", "Raw output for strings. Removes '\"' braces.", &raw,
             "header", "Add header, default value is 'true'", &header,
             "chunk-size", "Input chunk size in bytes, defult valut is " ~ chunkSize.to!string, &chunkSize,
             );
