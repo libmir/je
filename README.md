@@ -28,3 +28,10 @@ dub build --build=release
 ```
 
 For more details run `je --help`.
+
+#### Usage
+
+After building, you can try je like this:
+```
+./je test.json --columns name:name,asdf:dependencies.asdf --input test.json
+```
