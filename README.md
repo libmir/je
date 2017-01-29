@@ -1,6 +1,6 @@
 JE
 =====
-Fast JSON to TSV/CSV Extractor.
+Fast JSON to TSV/CSV/JSON/User-defined-format Extractor.
 
 ### Build je
 
@@ -43,8 +43,15 @@ $ cat in.jsonl
 {"a":{"b":0}, "d":1}
 {"a":{"b":2}}
 
+# query with non-positional style 
 $ ./je -c a.b,d -i in.jsonl --out=$'{"a":%s,"t":%s}\n'
 {"a":"\n","t":2}
 {"a":0,"t":1}
 {"a":2,"t":null}
+
+# query with positional style
+./je -c a.b,d -i in.jsonl --out=$'{"a":%2$s,"t":%1$s}\n'
+{"a":2,"t":"\n"}
+{"a":1,"t":0}
+{"a":null,"t":2}
 ```
