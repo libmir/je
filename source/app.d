@@ -4,6 +4,7 @@ import std.getopt;
 import std.algorithm;
 import std.range;
 import std.format;
+import std.traits;
 
 import asdf;
 
@@ -20,6 +21,7 @@ int main(string[] args)
     string newline = "\n";
     arraySep = ",";
     bool raw;
+    string fmt;
     try
     {
         auto helpInformation = args.getopt(
@@ -30,8 +32,9 @@ int main(string[] args)
             "o|output", "Output file name", &foutName,
             "i|input", "Input file name", &finName,
             "r|raw", "Raw output for strings. Removes '\"' braces.", &raw,
-            "header", "Add header, default value is 'true'", &header,
-            "chunk-size", "Input chunk size in bytes, defult valut is " ~ chunkSize.to!string, &chunkSize,
+            "header", "Add header, default value is 'true'. Header would not be added if --outer option was specified.", &header,
+            "chunk-size", "Input chunk size in bytes, default value is " ~ chunkSize.to!string, &chunkSize,
+            "out", `user-defined output format (example: --out=$'{"a":"%s": "t":%s}\n')`, &fmt,
             );
         if (helpInformation.helpWanted)
         {
@@ -46,6 +49,9 @@ int main(string[] args)
         return 1;
     }
 
+    if(fmt)
+        header = false;
+
     names = new string[columns.length];
     options = new string[][columns.length];
     auto fixedFlags = new bool[columns.length];
@@ -58,13 +64,16 @@ int main(string[] args)
             options[i] = s[2].split(".");
             continue;
         }
-        s = column.findSplit("=");
-        if(s[1].length)
+        if (!fmt)
         {
-            fixedFlags[i] = true;
-            names[i] = s[0];
-            options[i] = [s[2]];
-            continue;
+            s = column.findSplit("=");
+            if(s[1].length)
+            {
+                fixedFlags[i] = true;
+                names[i] = s[0];
+                options[i] = [s[2]];
+                continue;
+            }
         }
         names[i] = column;
         options[i] = column.split(".");
@@ -90,7 +99,9 @@ int main(string[] args)
     }
     ////////////
     auto ltw = fout.lockingTextWriter;
-    foreach(line; fin.byChunk(chunkSize).parseJsonByLine())
+    auto lines = fin.byChunk(chunkSize).parseJsonByLine();
+    if (!fmt)
+    foreach(line; lines)
     {
         foreach(i, option; options)
         {
@@ -119,5 +130,77 @@ int main(string[] args)
             ltw.put(i == options.length - 1 ? newline : sep);
         }
     }
+    else
+    {
+        auto spec = FormatSpec!char(fmt);
+        auto values = new Asdf[options.length];
+        foreach(line; lines)
+        {
+            foreach(i, option; options)
+                values[i] = line[option];
+            jeFormattedWrite(&ltw.put!(const(char)[]), spec, fmt, values);
+        }
+    }
     return 0;
+}
+
+uint jeFormattedWrite(void delegate(const(char)[] data) w, FormatSpec!char spec, string fmt, Asdf[] args)
+{
+    import std.exception: enforce;
+    import std.conv: to;
+
+    // Are we already done with formats? Then just dump each parameter in turn
+    uint currentArg = 0;
+    while (spec.writeUpToNextSpec(w))
+    {
+        if (currentArg == args.length && !spec.indexStart)
+        {
+            // leftover spec?
+            enforce(fmt.length == 0, "Orphan format specifier: %" ~ spec.spec);
+            break;
+        }
+        if (spec.width == spec.DYNAMIC)
+        {
+            throw new Exception("Dynamic widths are not allowed in JE format strings.");
+        }
+        else if (spec.width < 0)
+        {
+            // means: get width as a positional parameter
+            throw new Exception("Negative widths are not allowed in JE format strings.");
+        }
+        if (spec.precision == spec.DYNAMIC)
+        {
+            throw new Exception("Dynamic precisions are not allowed in JE format strings.");
+        }
+        else if (spec.precision < 0)
+        {
+            // means: get precision as a positional parameter
+            throw new Exception("Negative precisions are not allowed in JE format strings.");
+        }
+        // Format!
+        if (spec.indexStart > 0)
+        {
+            if (args.length > 0)
+            {
+                foreach (i; spec.indexStart - 1 .. spec.indexEnd)
+                {
+                    if (args.length <= i) break;
+                    if (args[i].data.length)
+                        args[i].toString(w);
+                    else
+                        w("null");
+                }
+            }
+            if (currentArg < spec.indexEnd) currentArg = spec.indexEnd;
+        }
+        else
+        {
+            if (args[currentArg].data.length)
+                args[currentArg].toString(w);
+            else
+                w("null");
+            ++currentArg;
+        }
+    }
+    return currentArg;
 }

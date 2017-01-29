@@ -35,3 +35,16 @@ After building, you can try je like this:
 ```
 ./je test.json --columns name:name,asdf:dependencies.asdf --input test.json
 ```
+
+##### User defined output format
+```json
+$ cat in.jsonl 
+{"a":{"b":"\n"}, "d":2}
+{"a":{"b":0}, "d":1}
+{"a":{"b":2}}
+
+$ ./je -c a.b,d -i in.jsonl --out=$'{"a":%s,"t":%s}\n'
+{"a":"\n","t":2}
+{"a":0,"t":1}
+{"a":2,"t":null}
+```
