@@ -1,0 +1,25 @@
+machine:
+  environment:
+    DMD: 2.073.0
+    LDC: 1.1.0-beta6
+    DUB: 1.1.0
+    PATH: "${HOME}/dmd2/linux/bin64:${HOME}/ldc2-$LDC-linux-x86_64/bin:${PATH}"
+    LD_LIBRARY_PATH: "${HOME}/dmd2/linux/lib64:${HOME}/ldc2-$LDC-linux-x86_64/lib:${LD_LIBRARY_PATH}"
+checkout:
+  post:
+    - git submodule sync . && git submodule update --recursive --init || true
+    - git submodule sync . && git submodule update --recursive --init || true # duplication needed due to circleci bug, don't remove
+dependencies:
+  override:
+    - curl -fsSL --retry 3 "http://downloads.dlang.org/releases/2.x/$DMD/dmd.$DMD.linux.tar.xz" | tar -C ~ -Jxf -
+    - dmd --version
+    - curl -fsSL --retry 3 "https://github.com/ldc-developers/ldc/releases/download/v$LDC/ldc2-$LDC-linux-x86_64.tar.xz" | tar -C ~ -Jxf -
+    - ldmd2 --version
+    - curl -fsSL --retry 3 http://code.dlang.org/files/dub-${DUB}-linux-x86_64.tar.gz | tar -C ~/ldc2-$LDC-linux-x86_64/bin -zxf -
+    - dub --version
+test:
+  override:
+    - dub build --compiler=dmd
+    - dub build --compiler=ldmd2
+    - dub build --compiler=ldmd2 --build=release-ss42
+    - dub build --compiler=ldmd2 --build=release-native
