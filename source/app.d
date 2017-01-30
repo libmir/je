@@ -2,11 +2,26 @@ import std.stdio;
 import std.conv;
 import std.getopt;
 import std.algorithm;
-import std.range;
+import std.array;
 import std.format;
 import std.traits;
+import std.exception;
+
+import std.digest.digest: digest, makeDigest;
+import std.digest.murmurhash: MurmurHash3;
 
 import asdf;
+import hll;
+
+alias Hasher = MurmurHash3!(128, 64);
+
+enum countSize = 32; // KB
+
+string[][][] countingOptions;
+size_t maxCountingOptionLength;
+Asdf[] countingValues;
+ubyte[] nullAsdfData = [ubyte(0)];
+string[] countArgs;
 
 int main(string[] args)
 {
@@ -17,15 +32,17 @@ int main(string[] args)
     size_t chunkSize = 4096;
     string finName;
     string foutName;
+    string countFoutName;
     string sep = "\t";
     string newline = "\n";
+    string[] counterStrings;
+    string countAlgo;
     arraySep = ",";
     bool raw;
     string fmt;
     try
     {
         auto helpInformation = args.getopt(
-            config.required,
             "c|columns", "column names (example: --columns=col_name1:opt1.optl1_2,col_name2:opt3.opt3_9,col_name3_with_the_same_opt,some=fixed_data)", &columns,
             "s|sep", `column separator, default value is "\t"`,  &sep,
             "n|newline", `row separator, default value is "\n"`, &newline,
@@ -35,6 +52,10 @@ int main(string[] args)
             "header", "Add header, default value is 'true'. Header would not be added if --outer option was specified.", &header,
             "chunk-size", "Input chunk size in bytes, default value is " ~ chunkSize.to!string, &chunkSize,
             "out", `user-defined output format (example: --out=$'{"a":"%s": "t":%s}\n')`, &fmt,
+            "count", "Counts unique elements using Probabilistic Linear Counting", &counterStrings,
+            "count-output", "Output file name for counting", &countFoutName,
+            "count-algo", "Counting algorithm (optional)", &countAlgo,
+            "count-algo-params", "Counting algorithm parameters (optional)", &countArgs,
             );
         if (helpInformation.helpWanted)
         {
@@ -52,6 +73,8 @@ int main(string[] args)
     if(fmt)
         header = false;
 
+    if (columns.length == 0)
+        header = false;
     names = new string[columns.length];
     options = new string[][columns.length];
     auto fixedFlags = new bool[columns.length];
@@ -81,6 +104,7 @@ int main(string[] args)
 
     auto fin = finName.length ? File(finName) : stdin;
     auto fout = foutName.length ? File(foutName, "w") : stdout;
+    auto cout = countFoutName.length ? File(countFoutName, "w") : stdout;
 
     if(header)
     {
@@ -97,12 +121,49 @@ int main(string[] args)
             fout.writef("%(%s" ~ sep ~ "%)" ~ newline, names);
         }
     }
+
+    if(counterStrings.length)
+    {
+        countingOptions = counterStrings.map!(a => a.splitter("&").map!(a => a.split(".")).array).array;
+        maxCountingOptionLength = countingOptions.map!"a.length".reduce!max;
+        countingValues = new Asdf[maxCountingOptionLength];
+    }
+
+    Counter counter;
+    if (counterStrings.length)
+    {
+        try
+        {
+            switch(countAlgo)
+            {
+                case "timestamp":
+                    counter = new TimePartitioner;
+                    break;
+                default:
+                    enforce(countAlgo.length == 0, "Unexpected count algorithm: " ~ countAlgo);
+                    counter = new DefaultCounter;
+            }
+        }
+        catch(Exception e)
+        {
+            writeln("Failed to create counters:");
+            writeln(e.msg);
+        }
+    }
+    else
+    {
+        counter = new NullCounter;
+    }
+
     ////////////
     auto ltw = fout.lockingTextWriter;
     auto lines = fin.byChunk(chunkSize).parseJsonByLine();
     if (!fmt)
     foreach(line; lines)
     {
+        if(line.data.length == 0)
+            continue;
+        counter.put(line);
         foreach(i, option; options)
         {
             if(fixedFlags[i])
@@ -141,6 +202,7 @@ int main(string[] args)
             jeFormattedWrite(&ltw.put!(const(char)[]), spec, fmt, values);
         }
     }
+    cout.write(counter);
     return 0;
 }
 
@@ -203,4 +265,98 @@ uint jeFormattedWrite(void delegate(const(char)[] data) w, FormatSpec!char spec,
         }
     }
     return currentArg;
+}
+
+interface Counter
+{
+    void put(Asdf line);
+
+    void toString(scope void delegate(const(char)[]) sink);
+}
+
+class NullCounter : Counter
+{
+    void put(Asdf line) {}
+    void toString(scope void delegate(const(char)[]) sink) {}
+}
+
+class DefaultCounter : Counter
+{
+    HLL[] counters;
+
+    this()
+    {
+        import core.stdc.stdlib;
+        counters = uninitializedArray!(HLL[])(countingOptions.length);
+        foreach(ref counter; counters)
+            dlang_hll_create(counter, 18, 25, &malloc, &realloc, &free);
+    }
+
+    ~this()
+    {
+        foreach(ref counter; counters)
+            dlang_hll_destroy(counter);
+    }
+
+    void put(Asdf line)
+    {
+        foreach(i, countingOption; countingOptions)
+        {
+            auto hasher = makeDigest!Hasher;
+            foreach(path; countingOption)
+            {
+                auto value = line[path];
+                hasher.put(value.data.length ? value.data : nullAsdfData);
+            }
+            auto h2 = cast(ulong[2])hasher.finish();
+            auto h = h2[0] ^ h2[1];
+            counters[i].put(h);
+        }
+    }
+
+    void toString(scope void delegate(const(char)[]) sink)
+    {
+        enum fmt = `{"counter":%s,"count":%s}` ~ "\n";
+        foreach(i, ref counter; counters)
+            sink.formattedWrite(fmt, i + 1, counter.count);
+    }
+}
+
+class TimePartitioner : Counter
+{
+    ulong mod;
+    DefaultCounter[ulong] counters;
+    string[] path;
+
+    this()
+    {
+        enforce(countArgs.length == 2, "Timer partitioner requires eaxctly two parameters: JSON path for timestamp, interval (in seconds).");
+        path = countArgs[0].split(".");
+        mod = countArgs[1].to!ulong;
+    }
+
+    void put(Asdf line)
+    {
+        auto ts = line[path];
+        ulong partition = ts.get(0UL);
+        partition -= partition % mod;
+    L:
+        if(auto p = partition in counters)
+        {
+            p.put(line);
+        }
+        else
+        {
+            counters[partition] = new DefaultCounter();
+            goto L;
+        }
+    }
+
+    void toString(scope void delegate(const(char)[]) sink)
+    {
+        enum fmt = `{"ts":%s,"counter":%s,"count":%s}` ~ "\n";
+        foreach(ts, counterCollection; counters)
+            foreach(i, ref counter; counterCollection.counters)
+                sink.formattedWrite(fmt, ts, i + 1, counter.count);
+    }
 }
