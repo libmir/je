@@ -1,3 +1,5 @@
+[![Circle CI Docs](https://circleci.com/gh/tamediadigital/je.svg?style=shield&circle-token=:circle-ci-badge-token)](https://circleci.com/gh/tamediadigital/je)
+
 JE
 =====
 Fast JSON to TSV/CSV/JSON/User-defined-format Extractor.
