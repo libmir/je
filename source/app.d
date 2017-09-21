@@ -36,6 +36,7 @@ int main(string[] args)
     string sep = "\t";
     string newline = "\n";
     string[] counterStrings;
+    string[] counterNames;
     string countAlgo;
     arraySep = ",";
     bool raw;
@@ -124,6 +125,20 @@ int main(string[] args)
 
     if(counterStrings.length)
     {
+        counterNames = new string[counterStrings.length];
+        foreach(i, ref str; counterStrings)
+        {
+            auto spl = str.findSplit(":");
+            if (spl[1].length)
+            {
+                str = spl[2];
+                counterNames[i] = spl[0];
+            }
+            else
+            {
+                counterNames[i] = format("_counter_%s", i + 1);
+            }
+        }
         countingOptions = counterStrings.map!(a => a.splitter("&").map!(a => a.split(".")).array).array;
         maxCountingOptionLength = countingOptions.map!"a.length".reduce!max;
         countingValues = new Asdf[maxCountingOptionLength];
@@ -137,11 +152,11 @@ int main(string[] args)
             switch(countAlgo)
             {
                 case "timestamp":
-                    counter = new TimePartitioner;
+                    counter = new TimePartitioner(counterNames);
                     break;
                 default:
                     enforce(countAlgo.length == 0, "Unexpected count algorithm: " ~ countAlgo);
-                    counter = new DefaultCounter;
+                    counter = new DefaultCounter(counterNames);
             }
         }
         catch(Exception e)
@@ -283,10 +298,12 @@ class NullCounter : Counter
 class DefaultCounter : Counter
 {
     HLL[] counters;
+    string[] counterNames;
 
-    this()
+    this(string[] counterNames)
     {
         import core.stdc.stdlib;
+        this.counterNames = counterNames;
         counters = uninitializedArray!(HLL[])(countingOptions.length);
         foreach(ref counter; counters)
             dlang_hll_create(counter, 18, 25, &malloc, &realloc, &free);
@@ -316,9 +333,14 @@ class DefaultCounter : Counter
 
     void toString(scope void delegate(const(char)[]) sink)
     {
-        enum fmt = `{"counter":%s,"count":%s}` ~ "\n";
-        foreach(i, ref counter; counters)
-            sink.formattedWrite(fmt, i + 1, counter.count);
+        sink("{");
+        foreach (i, ref counter; counters)
+        {
+            if (i)
+                sink(",");
+            sink.formattedWrite(`"%s":%s`, counterNames[i], counter.count);
+        }
+        sink("}\n");
     }
 }
 
@@ -327,9 +349,11 @@ class TimePartitioner : Counter
     ulong mod;
     DefaultCounter[ulong] counters;
     string[] path;
+    string[] counterNames;
 
-    this()
+    this(string[] counterNames)
     {
+        this.counterNames = counterNames;
         enforce(countArgs.length == 2, "Timer partitioner requires eaxctly two parameters: JSON path for timestamp, interval (in seconds).");
         path = countArgs[0].split(".");
         mod = countArgs[1].to!ulong;
@@ -347,16 +371,23 @@ class TimePartitioner : Counter
         }
         else
         {
-            counters[partition] = new DefaultCounter();
+            counters[partition] = new DefaultCounter(counterNames);
             goto L;
         }
     }
 
     void toString(scope void delegate(const(char)[]) sink)
     {
-        enum fmt = `{"ts":%s,"counter":%s,"count":%s}` ~ "\n";
         foreach(ts, counterCollection; counters)
-            foreach(i, ref counter; counterCollection.counters)
-                sink.formattedWrite(fmt, ts, i + 1, counter.count);
+        {
+            sink("{");
+            sink.formattedWrite(`"ts":%s`, ts);
+            foreach (i, ref counter; counterCollection.counters)
+            {
+                sink(",");
+                sink.formattedWrite(`"%s":%s`, counterNames[i], counter.count);
+            }
+            sink("}\n");
+        }
     }
 }

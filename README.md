@@ -78,10 +78,12 @@ $ cat in.jsonl
 {"a":{"b":10.00}, "d":null}
 {"a":{"b":10.00}}
 
-$je -i in.jsonl --count=a.b --count=d --count="a.b&d"
-{"counter":1,"count":2}
-{"counter":2,"count":1}
-{"counter":3,"count":2}
+$je -i in.jsonl --counta.b --count=d --count="a.b&d"
+{"_counter_1":2,"_counter_2":1,"_counter_3":2}
+
+// with named counters
+$je -i in.jsonl --count=a.b:a.b --count=d --count="expr:a.b&d"
+{"a.b":2,"_counter_2":1,"expr":2}
 ```
 
 ###### Unix Time-stamp partition
@@ -94,6 +96,11 @@ $ cat in.jsonl
 {"a":{"ts":1485831401}, "param":1}
 
 $ ./je -i in.jsonl --count=param --count-algo=timestamp --count-algo-params=a.ts,60
-{"ts":1485831360,"counter":1,"count":2}
-{"ts":1485831240,"counter":1,"count":2}
+{"ts":1485831360,"_counter_1":2}
+{"ts":1485831240,"_counter_1":2}
+
+// with named counters
+$ ./je -i in.jsonl --count=param:param --count-algo=timestamp --count-algo-params=a.ts,60
+{"ts":1485831360,"param":2}
+{"ts":1485831240,"param":2}
 ```
