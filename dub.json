@@ -4,7 +4,8 @@
 		"Ilya Yaroshenko"
 	],
 	"dependencies": {
-		"asdf": "~>0.1.0-alpha3"
+		"asdf": "~>0.1.4",
+		"hll-d": "~>0.3.0"
 	},
 	"description": "Json Extract: a tool to extract data from json",
 	"copyright": "Copyright © 2016, Tamedia Digital",
@@ -18,5 +19,5 @@
 			"buildOptions": ["releaseMode", "optimize", "inline"],
 			"dflags-ldc": ["-mcpu=native"]
 		}
-	},
+	}
 }

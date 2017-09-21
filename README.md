@@ -54,4 +54,53 @@ $ ./je -c a.b,d -i in.jsonl --out=$'{"a":%s,"t":%s}\n'
 {"a":2,"t":"\n"}
 {"a":1,"t":0}
 {"a":null,"t":2}
+
+##### [Probabilistic Linear Counting](https://github.com/tamediadigital/lincount)
+
+```json
+$ cat in.jsonl
+{"a":{"b":0}, "d":1}
+{"a":{"b":0}, "d":2}
+{"a":{"b":"\n"}, "d":1}
+{"a":{"b":"\n"}, "d":2}
+
+$je -i in.jsonl --count=a.b --count=d --count="a.b&d"
+
+{"counter":1,"count":2}
+{"counter":2,"count":2}
+{"counter":3,"count":4}
+```
+
+```json
+$ cat in.jsonl
+{"a":{"b":10.0}, "d":null}
+{"a":{"b":10.0}}
+{"a":{"b":10.00}, "d":null}
+{"a":{"b":10.00}}
+
+$je -i in.jsonl --counta.b --count=d --count="a.b&d"
+{"_counter_1":2,"_counter_2":1,"_counter_3":2}
+
+// with named counters
+$je -i in.jsonl --count=a.b:a.b --count=d --count="expr:a.b&d"
+{"a.b":2,"_counter_2":1,"expr":2}
+```
+
+###### Unix Time-stamp partition
+```json
+$ cat in.jsonl
+{"a":{"ts":1485831253}, "param":0}
+{"a":{"ts":1485831254}, "param":1}
+{"a":{"ts":1485831255}, "param":1}
+{"a":{"ts":1485831400}, "param":0}
+{"a":{"ts":1485831401}, "param":1}
+
+$ ./je -i in.jsonl --count=param --count-algo=timestamp --count-algo-params=a.ts,60
+{"ts":1485831360,"_counter_1":2}
+{"ts":1485831240,"_counter_1":2}
+
+// with named counters
+$ ./je -i in.jsonl --count=param:param --count-algo=timestamp --count-algo-params=a.ts,60
+{"ts":1485831360,"param":2}
+{"ts":1485831240,"param":2}
 ```
